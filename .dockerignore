@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+tickets.db
+tickets.db-*
+.git
+.venv

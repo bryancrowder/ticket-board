@@ -1,0 +1,13 @@
+services:
+  tickets:
+    build: .
+    image: ticket-board:latest
+    container_name: ticket-board
+    ports:
+      - "8080:8080"
+    volumes:
+      - tickets-data:/data
+    restart: unless-stopped
+
+volumes:
+  tickets-data:

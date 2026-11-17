@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ticket Board</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #151b23;
+    --panel-2: #1b2330;
+    --border: #2a3441;
+    --text: #e6edf3;
+    --muted: #8b98a9;
+    --accent: #4f8cff;
+    --accent-soft: rgba(79,140,255,.14);
+    --ok: #3fb950;
+    --warn: #d29922;
+    --bad: #f85149;
+    --hi: #db6d28;
+    --crit: #f85149;
+    --radius: 10px;
+    font-size: 15px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+  }
+  button { font: inherit; cursor: pointer; }
+
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; margin-right: 8px; }
+  .brand .logo {
+    width: 30px; height: 30px; border-radius: 8px;
+    background: linear-gradient(135deg, #4f8cff, #7c5cff);
+    display: grid; place-items: center; font-size: 16px;
+  }
+  .brand h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+  .brand .date { color: var(--muted); font-size: 12px; }
+
+  .stats { display: flex; gap: 8px; flex-wrap: wrap; }
+  .stat {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .stat b { color: var(--text); font-size: 13px; margin-right: 4px; }
+  .stat.bad b { color: var(--bad); }
+  .stat.warn b { color: var(--warn); }
+
+  .spacer { flex: 1; }
+  .search {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 7px 12px;
+    min-width: 180px;
+    outline: none;
+  }
+  .search:focus { border-color: var(--accent); }
+  .toggle {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 13px;
+  }
+  .toggle.on { color: var(--bad); border-color: var(--bad); background: rgba(248,81,73,.08); }
+  .btn {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 13px;
+  }
+  .btn:hover { border-color: #3b4757; }
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+  .btn.primary:hover { filter: brightness(1.1); }
+  .btn.danger { color: var(--bad); }
+  .btn.danger:hover { background: rgba(248,81,73,.1); border-color: var(--bad); }
+
+  #board {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(220px, 1fr));
+    gap: 12px;
+    padding: 14px 18px 18px;
+    overflow-x: auto;
+    align-items: start;
+  }
+  .column {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 130px);
+    min-width: 220px;
+  }
+  .col-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .col-dot { width: 9px; height: 9px; border-radius: 50%; }
+  .col-title { font-weight: 600; font-size: 13px; }
+  .col-count { color: var(--muted); font-size: 12px; }
+  .col-points { margin-left: auto; color: var(--muted); font-size: 11px; }
+  .col-add {
+    background: none; border: none; color: var(--muted);
+    font-size: 16px; line-height: 1; padding: 2px 5px; border-radius: 6px;
+  }
+  .col-add:hover { color: var(--text); background: var(--panel-2); }
+  .cards { padding: 10px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 60px; }
+  .column.dragover { outline: 2px dashed var(--accent); outline-offset: -4px; background: var(--accent-soft); }
+  .empty-hint { color: #4a5568; font-size: 12px; text-align: center; padding: 14px 8px; border: 1px dashed var(--border); border-radius: 8px; }
+
+  .card {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid transparent;
+    border-radius: 8px;
+    padding: 9px 10px;
+    cursor: grab;
+    transition: border-color .12s, transform .05s;
+  }
+  .card:hover { border-color: #3b4757; }
+  .card.dragging { opacity: .45; cursor: grabbing; }
+  .card .title { font-weight: 600; font-size: 13.5px; margin-bottom: 6px; word-wrap: break-word; }
+  .card .desc {
+    color: var(--muted); font-size: 12px; margin-bottom: 7px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .card .meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    font-size: 11px; padding: 2px 7px; border-radius: 20px;
+    background: rgba(255,255,255,.06); color: var(--muted); white-space: nowrap;
+  }
+  .chip.prio-low { color: #79c0ff; }
+  .chip.prio-medium { color: #d2a8ff; }
+  .chip.prio-high { color: var(--hi); background: rgba(219,109,40,.14); }
+  .chip.prio-critical { color: #fff; background: var(--crit); font-weight: 700; }
+  .chip.pts { color: #9ecbff; }
+  .chip.due-over { color: #fff; background: var(--bad); font-weight: 600; }
+  .chip.due-today { color: #1a1a1a; background: var(--warn); font-weight: 600; }
+  .chip.due-soon { color: var(--warn); }
+  .card.p-over { border-left-color: var(--bad); }
+  .card.p-today { border-left-color: var(--warn); }
+
+  /* Modal */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(3,6,10,.65);
+    display: none; place-items: center; z-index: 50; padding: 16px;
+  }
+  .overlay.open { display: grid; }
+  .modal {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: 100%; max-width: 520px;
+    padding: 18px;
+    box-shadow: 0 18px 60px rgba(0,0,0,.5);
+  }
+  .modal h2 { margin: 0 0 14px; font-size: 16px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+  .field input, .field textarea, .field select {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font: inherit;
+    outline: none;
+  }
+  .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--accent); }
+  .field textarea { resize: vertical; min-height: 64px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 16px; align-items: center; }
+  .err { color: var(--bad); font-size: 12.5px; margin-top: 8px; white-space: pre-wrap; }
+  .toast {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 16px; border-radius: 8px; font-size: 13px; z-index: 99;
+    opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  .toast.show { opacity: 1; }
+  @media (max-width: 900px) {
+    #board { grid-template-columns: repeat(5, 240px); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo">🎫</div>
+    <div>
+      <h1>Ticket Board</h1>
+      <div class="date" id="today-label"></div>
+    </div>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div class="spacer"></div>
+  <input class="search" id="search" type="search" placeholder="Search tickets…">
+  <button class="toggle" id="overdue-toggle" title="Show only overdue tickets">⚠ Overdue</button>
+  <a class="btn" href="/api/tickets/export.csv" download>Export CSV</a>
+  <button class="btn primary" id="new-ticket">+ New Ticket</button>
+</header>
+
+<main id="board"></main>
+
+<div class="overlay" id="overlay">
+  <form class="modal" id="ticket-form" novalidate>
+    <h2 id="modal-title">New Ticket</h2>
+    <div class="field">
+      <label for="f-title">Title *</label>
+      <input id="f-title" maxlength="500" required placeholder="e.g. Renew TLS cert for staging">
+    </div>
+    <div class="field">
+      <label for="f-desc">Description</label>
+      <textarea id="f-desc" placeholder="Notes, links, next steps…"></textarea>
+    </div>
+    <div class="grid2">
+      <div class="field">
+        <label for="f-status">Column</label>
+        <select id="f-status"></select>
+      </div>
+      <div class="field">
+        <label for="f-due">Due date</label>
+        <input id="f-due" type="date">
+      </div>
+      <div class="field">
+        <label for="f-points">Effort (points)</label>
+        <select id="f-points">
+          <option value="0">—</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="5">5</option>
+          <option value="8">8</option>
+          <option value="13">13</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="f-priority">Priority</label>
+        <select id="f-priority">
+          <option value="low">Low</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High</option>
+          <option value="critical">Critical</option>
+        </select>
+      </div>
+    </div>
+    <div class="err" id="form-err"></div>
+    <div class="modal-actions">
+      <button type="submit" class="btn primary" id="save-btn">Save</button>
+      <button type="button" class="btn" id="cancel-btn">Cancel</button>
+      <div class="spacer"></div>
+      <button type="button" class="btn danger" id="delete-btn" style="display:none">Delete</button>
+    </div>
+  </form>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const STATUSES = [
+  { id: "backlog",     label: "Backlog",     color: "#6e7a8a" },
+  { id: "todo",        label: "To Do",       color: "#4f8cff" },
+  { id: "in_progress", label: "In Progress", color: "#d29922" },
+  { id: "review",      label: "Review",      color: "#a371f7" },
+  { id: "done",        label: "Done",        color: "#3fb950" },
+];
+
+let tickets = [];
+let editingId = null;
+let searchQ = "";
+let overdueOnly = false;
+let dragId = null;
+
+const $ = (s) => document.querySelector(s);
+const boardEl = $("#board");
+
+function localToday() {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+function daysUntil(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const target = new Date(y, m - 1, d);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((target - today) / 86400000);
+}
+function dueInfo(t) {
+  if (!t.due_date) return null;
+  const days = daysUntil(t.due_date);
+  if (t.status === "done") return { cls: "", label: t.due_date, level: 0 };
+  if (days < 0) return { cls: "due-over", label: `Overdue ${-days}d`, level: -1 };
+  if (days === 0) return { cls: "due-today", label: "Due today", level: 0 };
+  if (days <= 3) return { cls: "due-soon", label: `Due in ${days}d`, level: 1 };
+  return { cls: "", label: t.due_date, level: 2 };
+}
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function toast(msg) {
+  const el = $("#toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove("show"), 2200);
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    headers: { "Content-Type": "application/json" },
+    ...opts,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  if (!res.ok) {
+    let msg = res.status + " error";
+    try { const j = await res.json(); msg = j.error && typeof j.error === "object" ? Object.values(j.error).join(" ") : (j.error || msg); } catch (e) {}
+    throw new Error(msg);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+async function refresh() {
+  tickets = await api("/api/tickets");
+  render();
+}
+
+function visible(t) {
+  if (overdueOnly) {
+    const di = dueInfo(t);
+    if (!di || di.level !== -1) return false;
+  }
+  if (searchQ) {
+    const hay = (t.title + " " + t.description).toLowerCase();
+    if (!hay.includes(searchQ)) return false;
+  }
+  return true;
+}
+
+function renderStats() {
+  const today = localToday();
+  const open = tickets.filter(t => t.status !== "done");
+  const overdue = open.filter(t => t.due_date && t.due_date < today).length;
+  const week = open.filter(t => {
+    if (!t.due_date || t.due_date < today) return false;
+    return daysUntil(t.due_date) <= 7;
+  }).length;
+  const done = tickets.length - open.length;
+  $("#stats").innerHTML = `
+    <div class="stat"><b>${open.length}</b>Open</div>
+    <div class="stat warn"><b>${week}</b>Due ≤7d</div>
+    <div class="stat bad"><b>${overdue}</b>Overdue</div>
+    <div class="stat"><b>${done}</b>Done</div>`;
+}
+
+function render() {
+  renderStats();
+  boardEl.innerHTML = "";
+  for (const st of STATUSES) {
+    const items = tickets
+      .filter(t => t.status === st.id)
+      .filter(visible)
+      .sort((a, b) => a.position - b.position || a.id - b.id);
+    const allInCol = tickets.filter(t => t.status === st.id);
+    const pts = allInCol.reduce((s, t) => s + (t.points || 0), 0);
+
+    const col = document.createElement("section");
+    col.className = "column";
+    col.dataset.status = st.id;
+    col.innerHTML = `
+      <div class="col-head">
+        <span class="col-dot" style="background:${st.color}"></span>
+        <span class="col-title">${st.label}</span>
+        <span class="col-count">${allInCol.length}</span>
+        <span class="col-points">${pts ? pts + " pts" : ""}</span>
+        <button class="col-add" title="Add to ${st.label}">＋</button>
+      </div>
+      <div class="cards"></div>`;
+    const cardsEl = col.querySelector(".cards");
+    if (items.length === 0) {
+      cardsEl.innerHTML = `<div class="empty-hint">${overdueOnly || searchQ ? "No matches" : "Drop tickets here"}</div>`;
+    }
+    for (const t of items) cardsEl.appendChild(makeCard(t));
+
+    col.querySelector(".col-add").addEventListener("click", () => openModal(null, st.id));
+    col.addEventListener("dragover", (e) => { e.preventDefault(); col.classList.add("dragover"); });
+    col.addEventListener("dragleave", () => col.classList.remove("dragover"));
+    col.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      col.classList.remove("dragover");
+      if (dragId == null) return;
+      const t = tickets.find(x => x.id === dragId);
+      dragId = null;
+      if (!t || t.status === st.id) return;
+      await api(`/api/tickets/${t.id}`, { method: "PATCH", body: { status: st.id } });
+      await refresh();
+    });
+    boardEl.appendChild(col);
+  }
+}
+
+function makeCard(t) {
+  const el = document.createElement("article");
+  el.className = "card";
+  el.draggable = true;
+  el.dataset.id = t.id;
+  const di = dueInfo(t);
+  const cardLevel = (di && t.status !== "done") ? di.level : 99;
+  if (cardLevel === -1) el.classList.add("p-over");
+  else if (cardLevel === 0 && t.status !== "done") el.classList.add("p-today");
+  el.innerHTML = `
+    <div class="title">${escapeHtml(t.title)}</div>
+    ${t.description ? `<div class="desc">${escapeHtml(t.description)}</div>` : ""}
+    <div class="meta">
+      <span class="chip prio-${t.priority}">${t.priority}</span>
+      ${t.points ? `<span class="chip pts">${t.points} pt</span>` : ""}
+      ${di ? `<span class="chip ${di.cls}">${di.label}</span>` : ""}
+    </div>`;
+  el.addEventListener("click", () => openModal(t.id));
+  el.addEventListener("dragstart", (e) => {
+    dragId = t.id;
+    el.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", String(t.id));
+  });
+  el.addEventListener("dragend", () => el.classList.remove("dragging"));
+  return el;
+}
+
+/* ---------- modal ---------- */
+function openModal(id, presetStatus) {
+  editingId = id;
+  const t = id ? tickets.find(x => x.id === id) : null;
+  $("#modal-title").textContent = t ? "Edit Ticket" : "New Ticket";
+  $("#delete-btn").style.display = t ? "" : "none";
+  $("#form-err").textContent = "";
+  const sel = $("#f-status");
+  sel.innerHTML = STATUSES.map(s => `<option value="${s.id}">${s.label}</option>`).join("");
+  $("#f-title").value = t ? t.title : "";
+  $("#f-desc").value = t ? t.description : "";
+  sel.value = t ? t.status : (presetStatus || "backlog");
+  $("#f-points").value = t ? String(t.points) : "0";
+  $("#f-priority").value = t ? t.priority : "medium";
+  $("#f-due").value = t ? (t.due_date || "") : "";
+  $("#overlay").classList.add("open");
+  setTimeout(() => $("#f-title").focus(), 30);
+}
+function closeModal() {
+  $("#overlay").classList.remove("open");
+  editingId = null;
+}
+
+$("#ticket-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = {
+    title: $("#f-title").value,
+    description: $("#f-desc").value,
+    status: $("#f-status").value,
+    points: parseInt($("#f-points").value, 10) || 0,
+    priority: $("#f-priority").value,
+    due_date: $("#f-due").value || null,
+  };
+  try {
+    if (editingId) await api(`/api/tickets/${editingId}`, { method: "PATCH", body });
+    else await api("/api/tickets", { method: "POST", body });
+    closeModal();
+    await refresh();
+    toast(editingId ? "Ticket updated" : "Ticket created");
+  } catch (err) {
+    $("#form-err").textContent = err.message;
+  }
+});
+$("#delete-btn").addEventListener("click", async () => {
+  if (editingId == null) return;
+  if (!confirm("Delete this ticket?")) return;
+  try {
+    await api(`/api/tickets/${editingId}`, { method: "DELETE" });
+    closeModal();
+    await refresh();
+    toast("Ticket deleted");
+  } catch (err) { toast(err.message); }
+});
+$("#cancel-btn").addEventListener("click", closeModal);
+$("#overlay").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeModal(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeModal();
+  if ((e.key === "n" || e.key === "N") && !$("#overlay").classList.contains("open") &&
+      !/input|textarea|select/i.test(document.activeElement.tagName)) {
+    e.preventDefault();
+    openModal(null);
+  }
+});
+
+$("#new-ticket").addEventListener("click", () => openModal(null));
+$("#search").addEventListener("input", (e) => { searchQ = e.target.value.trim().toLowerCase(); render(); });
+$("#overdue-toggle").addEventListener("click", (e) => {
+  overdueOnly = !overdueOnly;
+  e.currentTarget.classList.toggle("on", overdueOnly);
+  render();
+});
+
+/* ---------- init ---------- */
+$("#today-label").textContent = new Date().toLocaleDateString(undefined, {
+  weekday: "long", month: "long", day: "numeric", year: "numeric",
+});
+refresh().catch(err => toast("Load failed: " + err.message));
+</script>
+</body>
+</html>
