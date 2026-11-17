@@ -13,7 +13,7 @@ database server.
 - **Due dates** — cards show `Overdue Nd` (red), `Due today` (amber), or `Due in Nd` chips; overdue cards get a red edge; header stats track Open / Due ≤7d / Overdue / Done
 - **Effort estimates** — story points (1, 2, 3, 5, 8, 13) per card, with point totals per column so you can size a sprint at a glance
 - **Priorities** — Low / Medium / High / Critical badges
-- **Projects & groups** — tag any ticket with a project (e.g. `Acme`) and a group (e.g. `Forms`); the board has live dropdowns to filter everything by either, or both
+- **Projects & groups** — tag any ticket with a project (e.g. `Acme`) and a group (e.g. `Forms`) with expandable pickers: click a field to expand the list of existing values, type to filter, or type a brand-new one; the board has matching dropdowns to filter everything by either, or both
 - **Time tracking** — log hours spent per ticket (quarter-hour steps); cards show a ⏱ chip and the header totals time logged; moving a ticket to Done stamps a `completed_at` timestamp shown on the card
 - **Themes** — per-browser theme picker (saved locally): Neutral dark/light, Trail Blazers dark/light, Seahawks dark/light
 - **Search & filters** — live text search across titles and descriptions, plus a one-click "overdue only" view

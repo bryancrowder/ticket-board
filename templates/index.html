@@ -330,6 +330,77 @@
     opacity: 0; pointer-events: none; transition: opacity .2s;
   }
   .toast.show { opacity: 1; }
+
+  /* ---------- expandable combo lists (projects / groups) ---------- */
+  .combo { position: relative; display: flex; align-items: stretch; }
+  .combo-btn {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 7px 10px;
+    font: inherit;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    max-width: 190px;
+  }
+  .combo-btn .combo-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .combo-btn .car { font-size: 9px; opacity: .75; }
+  .combo-btn:hover { border-color: var(--accent); }
+  .combo-btn.filtered { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .combo > input {
+    flex: 1;
+    min-width: 0;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-right: none;
+    color: var(--text);
+    border-radius: 8px 0 0 8px;
+    padding: 8px 10px;
+    font: inherit;
+    font-size: 13px;
+    outline: none;
+  }
+  .combo > input:focus { border-color: var(--accent); }
+  .combo-toggle {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 0 8px 8px 0;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+  .combo-toggle:hover { color: var(--text); border-color: var(--accent); }
+  .combo-panel {
+    position: absolute;
+    top: calc(100% + 5px);
+    left: 0;
+    min-width: 100%;
+    width: max-content;
+    max-width: 280px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 12px 32px rgba(0,0,0,.4);
+    z-index: 80;
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 4px;
+  }
+  .combo-row {
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .combo-row:hover { background: var(--accent-soft); }
+  .combo-row.sel { color: var(--accent); font-weight: 600; }
+  .combo-row.none { color: var(--muted); }
+  .combo-hint { padding: 6px 10px; font-size: 11px; color: var(--hint); }
+
   @media (max-width: 900px) {
     #board { grid-template-columns: repeat(5, 250px); }
   }
@@ -346,12 +417,14 @@
   </div>
   <div class="stats" id="stats"></div>
   <div class="spacer"></div>
-  <select class="filter-select" id="filter-project" title="Filter by project">
-    <option value="">All projects</option>
-  </select>
-  <select class="filter-select" id="filter-group" title="Filter by group">
-    <option value="">All groups</option>
-  </select>
+  <div class="combo" id="filter-project-combo">
+    <button type="button" class="combo-btn" id="filter-project" title="Filter by project"><span class="combo-label">All projects</span><span class="car">▾</span></button>
+    <div class="combo-panel" id="filter-project-panel" hidden></div>
+  </div>
+  <div class="combo" id="filter-group-combo">
+    <button type="button" class="combo-btn" id="filter-group" title="Filter by group"><span class="combo-label">All groups</span><span class="car">▾</span></button>
+    <div class="combo-panel" id="filter-group-panel" hidden></div>
+  </div>
   <input class="search" id="search" type="search" placeholder="Search tickets…">
   <button class="toggle" id="overdue-toggle" title="Show only overdue tickets">⚠ Overdue</button>
   <a class="btn" href="/api/tickets/export.csv" download>Export CSV</a>
@@ -381,14 +454,20 @@
     </div>
     <div class="grid2">
       <div class="field">
-        <label for="f-project">Project</label>
-        <input id="f-project" list="dl-projects" maxlength="80" placeholder="e.g. Acme">
-        <datalist id="dl-projects"></datalist>
+        <label>Project</label>
+        <div class="combo">
+          <input id="f-project" maxlength="80" placeholder="Pick or type a project…" autocomplete="off">
+          <button type="button" class="combo-toggle" id="f-project-toggle" title="Expand projects list">▾</button>
+          <div class="combo-panel" id="f-project-panel" hidden></div>
+        </div>
       </div>
       <div class="field">
-        <label for="f-group">Group</label>
-        <input id="f-group" list="dl-groups" maxlength="80" placeholder="e.g. Forms">
-        <datalist id="dl-groups"></datalist>
+        <label>Group</label>
+        <div class="combo">
+          <input id="f-group" maxlength="80" placeholder="Pick or type a group…" autocomplete="off">
+          <button type="button" class="combo-toggle" id="f-group-toggle" title="Expand groups list">▾</button>
+          <div class="combo-panel" id="f-group-panel" hidden></div>
+        </div>
       </div>
       <div class="field">
         <label for="f-status">Column</label>
@@ -554,38 +633,86 @@ function renderStats() {
     <div class="stat"><b>${fmtTime(hours) || "0"}</b>Time logged</div>`;
 }
 
-function populateFilters() {
-  function fill(select, values, current) {
-    const first = select.options[0].cloneNode(true);
-    select.innerHTML = "";
-    select.appendChild(first);
-    for (const v of values) {
-      const o = document.createElement("option");
-      o.value = v;
-      o.textContent = v;
-      select.appendChild(o);
-    }
-    if (current && !values.includes(current)) {
-      const o = document.createElement("option");
-      o.value = current;
-      o.textContent = current + " (removed)";
-      select.appendChild(o);
-    }
-    select.value = current || "";
-    select.classList.toggle("filtered", !!current);
+/* ---------- expandable project/group lists ---------- */
+function closePanels() {
+  document.querySelectorAll(".combo-panel").forEach(p => { p.hidden = true; });
+}
+function buildPanel(panel, values, current, noneLabel, onPick) {
+  panel.innerHTML = "";
+  const none = document.createElement("div");
+  none.className = "combo-row none" + (current === "" ? " sel" : "");
+  none.textContent = noneLabel;
+  none.addEventListener("click", () => { onPick(""); closePanels(); });
+  panel.appendChild(none);
+  if (!values.length) {
+    const hint = document.createElement("div");
+    hint.className = "combo-hint";
+    hint.textContent = "Nothing yet — type one in the field.";
+    panel.appendChild(hint);
   }
-  fill($("#filter-project"), meta.projects, filterProject);
-  fill($("#filter-group"), meta.groups, filterGroup);
+  for (const v of values) {
+    const row = document.createElement("div");
+    row.className = "combo-row" + (v === current ? " sel" : "");
+    row.textContent = v;
+    row.addEventListener("click", () => { onPick(v); closePanels(); });
+    panel.appendChild(row);
+  }
 }
-function populateDatalists() {
-  $("#dl-projects").innerHTML = meta.projects.map(p => `<option value="${escapeHtml(p)}">`).join("");
-  $("#dl-groups").innerHTML = meta.groups.map(g => `<option value="${escapeHtml(g)}">`).join("");
+function refreshFilterLabel(btn, current, allLabel) {
+  btn.querySelector(".combo-label").textContent = current || allLabel;
+  btn.classList.toggle("filtered", !!current);
 }
+function setupFilter(id, key, allLabel) {
+  const btn = document.getElementById(id);
+  const panel = document.getElementById(id + "-panel");
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const wasOpen = !panel.hidden;
+    closePanels();
+    if (wasOpen) return;
+    const values = key === "project" ? meta.projects : meta.groups;
+    const current = key === "project" ? filterProject : filterGroup;
+    buildPanel(panel, values, current, allLabel, (v) => {
+      if (key === "project") filterProject = v; else filterGroup = v;
+      refreshFilterLabel(btn, v, allLabel);
+      render();
+    });
+    panel.hidden = false;
+  });
+}
+function setupFormCombo(inputId, valuesKey) {
+  const input = document.getElementById(inputId);
+  const panel = document.getElementById(inputId + "-panel");
+  const open = () => {
+    buildPanel(panel, meta[valuesKey], input.value, "— none —", (v) => { input.value = v; });
+    panel.hidden = false;
+  };
+  document.getElementById(inputId + "-toggle").addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (!panel.hidden) { closePanels(); return; }
+    open();
+    input.focus();
+  });
+  input.addEventListener("focus", () => { if (panel.hidden) open(); });
+  input.addEventListener("click", () => { if (panel.hidden) open(); });
+  input.addEventListener("input", () => {
+    if (panel.hidden) return;
+    const q = input.value.trim().toLowerCase();
+    panel.querySelectorAll(".combo-row:not(.none)").forEach(r => {
+      r.style.display = r.textContent.toLowerCase().includes(q) ? "" : "none";
+    });
+  });
+}
+setupFilter("filter-project", "project", "All projects");
+setupFilter("filter-group", "group", "All groups");
+setupFormCombo("f-project", "projects");
+setupFormCombo("f-group", "groups");
+document.addEventListener("click", (e) => { if (!e.target.closest(".combo")) closePanels(); });
 
 function render() {
   renderStats();
-  populateFilters();
-  populateDatalists();
+  refreshFilterLabel($("#filter-project"), filterProject, "All projects");
+  refreshFilterLabel($("#filter-group"), filterGroup, "All groups");
   boardEl.innerHTML = "";
   const scoped = scopeFiltered();
   for (const st of STATUSES) {
@@ -743,8 +870,6 @@ $("#overdue-toggle").addEventListener("click", (e) => {
   e.currentTarget.classList.toggle("on", overdueOnly);
   render();
 });
-$("#filter-project").addEventListener("change", (e) => { filterProject = e.target.value; render(); });
-$("#filter-group").addEventListener("change", (e) => { filterGroup = e.target.value; render(); });
 
 /* ---------- themes ---------- */
 function applyTheme(v) {
