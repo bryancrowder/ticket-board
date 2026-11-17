@@ -1,11 +1,11 @@
 FROM python:3.12-slim
 
 WORKDIR /app
-COPY app.py server.py ./
+COPY app.py server.py mcp_server.py ./
 COPY templates/ templates/
 
 RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir flask waitress
+ && pip install --no-cache-dir flask waitress "mcp<2"
 
 ENV TICKETS_DB=/data/tickets.db
 VOLUME ["/data"]

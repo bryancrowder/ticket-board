@@ -9,5 +9,20 @@ services:
       - tickets-data:/data
     restart: unless-stopped
 
+  # MCP server (off by default). Turn ON with:  docker compose --profile mcp up -d mcp
+  # Turn OFF with:                             docker compose stop mcp
+  mcp:
+    image: ticket-board:latest
+    container_name: ticket-board-mcp
+    profiles: ["mcp"]
+    command: ["python", "mcp_server.py", "--transport", "http", "--port", "8765"]
+    environment:
+      BOARD_URL: "http://tickets:8080"
+    ports:
+      - "8765:8765"
+    depends_on:
+      - tickets
+    restart: unless-stopped
+
 volumes:
   tickets-data:
