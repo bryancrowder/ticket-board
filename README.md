@@ -13,6 +13,9 @@ database server.
 - **Due dates** — cards show `Overdue Nd` (red), `Due today` (amber), or `Due in Nd` chips; overdue cards get a red edge; header stats track Open / Due ≤7d / Overdue / Done
 - **Effort estimates** — story points (1, 2, 3, 5, 8, 13) per card, with point totals per column so you can size a sprint at a glance
 - **Priorities** — Low / Medium / High / Critical badges
+- **Projects & groups** — tag any ticket with a project (e.g. `Acme`) and a group (e.g. `Forms`); the board has live dropdowns to filter everything by either, or both
+- **Time tracking** — log hours spent per ticket (quarter-hour steps); cards show a ⏱ chip and the header totals time logged; moving a ticket to Done stamps a `completed_at` timestamp shown on the card
+- **Themes** — per-browser theme picker (saved locally): Neutral dark/light, Trail Blazers dark/light, Seahawks dark/light
 - **Search & filters** — live text search across titles and descriptions, plus a one-click "overdue only" view
 - **CSV export** — one click to dump the whole board for a spreadsheet or backup
 - **Fast & private** — server-rendered single page, vanilla JS, no external CDNs, no fonts to fetch; runs fine on a Raspberry Pi
@@ -71,11 +74,12 @@ sudo ufw allow from <your-ip> to any port 8080 proto tcp
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/tickets?status=todo` | list (optional column filter) |
-| POST | `/api/tickets` | create — `{title, description, status, points, priority, due_date}` |
+| GET | `/api/tickets?status=todo&project=Acme&group=Forms` | list (optional status/project/group filters) |
+| POST | `/api/tickets` | create — `{title, description, project, group, status, points, priority, due_date, time_hours}` |
 | PATCH | `/api/tickets/<id>` | partial update, e.g. `{status: "in_progress"}` |
 | DELETE | `/api/tickets/<id>` | delete |
-| GET | `/api/tickets/export.csv` | CSV dump |
+| GET | `/api/tickets/export.csv` | CSV dump (includes project, group, time_hours, completed_at) |
+| GET | `/api/meta` | distinct projects and groups currently in use |
 | GET | `/api/health` | health check |
 
 Example:
@@ -83,11 +87,15 @@ Example:
 ```bash
 curl -X POST http://localhost:8080/api/tickets \
   -H 'Content-Type: application/json' \
-  -d '{"title":"Renew TLS cert","status":"todo","points":2,"priority":"high","due_date":"2026-12-01"}'
+  -d '{"title":"Renew TLS cert","status":"todo","points":2,"priority":"high","due_date":"2026-12-01","project":"Acme","group":"Forms"}'
 ```
 
 Statuses: `backlog`, `todo`, `in_progress`, `review`, `done`.
 Priorities: `low`, `medium`, `high`, `critical`.
+
+`completed_at` is managed automatically: it is stamped when a ticket's status
+changes to `done` and cleared when it leaves `done`. `time_hours` is a number
+from 0 to 999.
 
 ## Development
 

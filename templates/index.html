@@ -4,8 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ticket Board</title>
+<script>
+/* Apply saved theme before first paint to avoid a flash. */
+(function () {
+  try {
+    var t = localStorage.getItem("tb-theme");
+    if (t) document.documentElement.setAttribute("data-theme", t);
+  } catch (e) {}
+})();
+</script>
 <style>
+  /* ---------- themes ---------- */
   :root {
+    /* neutral dark (default) */
     --bg: #0d1117;
     --panel: #151b23;
     --panel-2: #1b2330;
@@ -14,14 +25,107 @@
     --muted: #8b98a9;
     --accent: #4f8cff;
     --accent-soft: rgba(79,140,255,.14);
+    --chip-bg: rgba(255,255,255,.07);
+    --hint: #4a5568;
+    --logo-grad: linear-gradient(135deg, #4f8cff, #7c5cff);
     --ok: #3fb950;
     --warn: #d29922;
     --bad: #f85149;
     --hi: #db6d28;
     --crit: #f85149;
     --radius: 10px;
-    font-size: 15px;
   }
+  [data-theme="light"] {
+    --bg: #f6f8fa;
+    --panel: #ffffff;
+    --panel-2: #eef1f5;
+    --border: #d7dee6;
+    --text: #1f242c;
+    --muted: #5c6773;
+    --accent: #2f6fe0;
+    --accent-soft: rgba(47,111,224,.12);
+    --chip-bg: rgba(0,0,0,.06);
+    --hint: #9aa5b1;
+    --logo-grad: linear-gradient(135deg, #2f6fe0, #7c5cff);
+    --ok: #1f8a2f;
+    --warn: #a06d0a;
+    --bad: #d83a32;
+    --hi: #b34f14;
+    --crit: #d83a32;
+  }
+  [data-theme="blazers-dark"] {
+    --bg: #0b0b0d;
+    --panel: #16161a;
+    --panel-2: #1e1e24;
+    --border: #34343c;
+    --text: #f2f2f4;
+    --muted: #9a9aa6;
+    --accent: #e03a3e;
+    --accent-soft: rgba(224,58,62,.15);
+    --chip-bg: rgba(255,255,255,.07);
+    --hint: #55555f;
+    --logo-grad: linear-gradient(135deg, #e03a3e, #7a1013);
+    --ok: #3fb950;
+    --warn: #d29922;
+    --bad: #f85149;
+    --hi: #db6d28;
+    --crit: #e03a3e;
+  }
+  [data-theme="blazers-light"] {
+    --bg: #f4f4f6;
+    --panel: #ffffff;
+    --panel-2: #f6f6f8;
+    --border: #dcdce2;
+    --text: #17171c;
+    --muted: #6b6b76;
+    --accent: #c8323a;
+    --accent-soft: rgba(200,50,58,.12);
+    --chip-bg: rgba(0,0,0,.06);
+    --hint: #a3a3ac;
+    --logo-grad: linear-gradient(135deg, #c8323a, #e03a3e);
+    --ok: #1f8a2f;
+    --warn: #a06d0a;
+    --bad: #c8323a;
+    --hi: #b34f14;
+    --crit: #c8323a;
+  }
+  [data-theme="seahawks-dark"] {
+    --bg: #040d1a;
+    --panel: #081a30;
+    --panel-2: #0d2240;
+    --border: #1c3a63;
+    --text: #e8eef7;
+    --muted: #8fa3bf;
+    --accent: #69be28;
+    --accent-soft: rgba(105,190,40,.16);
+    --chip-bg: rgba(255,255,255,.07);
+    --hint: #3d5578;
+    --logo-grad: linear-gradient(135deg, #69be28, #002244);
+    --ok: #3fb950;
+    --warn: #d29922;
+    --bad: #f85149;
+    --hi: #db6d28;
+    --crit: #f85149;
+  }
+  [data-theme="seahawks-light"] {
+    --bg: #eef2f7;
+    --panel: #ffffff;
+    --panel-2: #f2f5fa;
+    --border: #c9d4e2;
+    --text: #0c2242;
+    --muted: #54688a;
+    --accent: #4a9119;
+    --accent-soft: rgba(105,190,40,.16);
+    --chip-bg: rgba(0,34,68,.07);
+    --hint: #93a5bd;
+    --logo-grad: linear-gradient(135deg, #69be28, #002244);
+    --ok: #1f8a2f;
+    --warn: #a06d0a;
+    --bad: #d83a32;
+    --hi: #b34f14;
+    --crit: #d83a32;
+  }
+
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   body {
@@ -37,16 +141,16 @@
   header {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px 10px;
     align-items: center;
     padding: 12px 18px;
     border-bottom: 1px solid var(--border);
     background: var(--panel);
   }
-  .brand { display: flex; align-items: center; gap: 10px; margin-right: 8px; }
+  .brand { display: flex; align-items: center; gap: 10px; margin-right: 6px; }
   .brand .logo {
     width: 30px; height: 30px; border-radius: 8px;
-    background: linear-gradient(135deg, #4f8cff, #7c5cff);
+    background: var(--logo-grad);
     display: grid; place-items: center; font-size: 16px;
   }
   .brand h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: .2px; }
@@ -67,16 +171,20 @@
   .stat.warn b { color: var(--warn); }
 
   .spacer { flex: 1; }
-  .search {
+  .search, .filter-select, .theme-select {
     background: var(--panel-2);
     border: 1px solid var(--border);
     color: var(--text);
     border-radius: 8px;
-    padding: 7px 12px;
-    min-width: 180px;
+    padding: 7px 10px;
+    font: inherit;
+    font-size: 13px;
     outline: none;
   }
-  .search:focus { border-color: var(--accent); }
+  .search { min-width: 150px; }
+  .search:focus, .filter-select:focus, .theme-select:focus { border-color: var(--accent); }
+  .filter-select { max-width: 170px; }
+  .filter-select.filtered { border-color: var(--accent); color: var(--accent); font-weight: 600; }
   .toggle {
     background: var(--panel-2);
     border: 1px solid var(--border);
@@ -93,8 +201,10 @@
     border-radius: 8px;
     padding: 7px 12px;
     font-size: 13px;
+    text-decoration: none;
+    display: inline-block;
   }
-  .btn:hover { border-color: #3b4757; }
+  .btn:hover { border-color: var(--accent); }
   .btn.primary {
     background: var(--accent);
     border-color: var(--accent);
@@ -108,7 +218,7 @@
   #board {
     flex: 1;
     display: grid;
-    grid-template-columns: repeat(5, minmax(220px, 1fr));
+    grid-template-columns: repeat(5, minmax(225px, 1fr));
     gap: 12px;
     padding: 14px 18px 18px;
     overflow-x: auto;
@@ -121,7 +231,7 @@
     display: flex;
     flex-direction: column;
     max-height: calc(100vh - 130px);
-    min-width: 220px;
+    min-width: 225px;
   }
   .col-head {
     display: flex;
@@ -141,7 +251,7 @@
   .col-add:hover { color: var(--text); background: var(--panel-2); }
   .cards { padding: 10px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 60px; }
   .column.dragover { outline: 2px dashed var(--accent); outline-offset: -4px; background: var(--accent-soft); }
-  .empty-hint { color: #4a5568; font-size: 12px; text-align: center; padding: 14px 8px; border: 1px dashed var(--border); border-radius: 8px; }
+  .empty-hint { color: var(--hint); font-size: 12px; text-align: center; padding: 14px 8px; border: 1px dashed var(--border); border-radius: 8px; }
 
   .card {
     background: var(--panel-2);
@@ -152,7 +262,7 @@
     cursor: grab;
     transition: border-color .12s, transform .05s;
   }
-  .card:hover { border-color: #3b4757; }
+  .card:hover { border-color: var(--accent); }
   .card.dragging { opacity: .45; cursor: grabbing; }
   .card .title { font-weight: 600; font-size: 13.5px; margin-bottom: 6px; word-wrap: break-word; }
   .card .desc {
@@ -162,18 +272,24 @@
   .card .meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .chip {
     font-size: 11px; padding: 2px 7px; border-radius: 20px;
-    background: rgba(255,255,255,.06); color: var(--muted); white-space: nowrap;
+    background: var(--chip-bg); color: var(--muted); white-space: nowrap;
   }
   .chip.prio-low { color: #79c0ff; }
   .chip.prio-medium { color: #d2a8ff; }
   .chip.prio-high { color: var(--hi); background: rgba(219,109,40,.14); }
   .chip.prio-critical { color: #fff; background: var(--crit); font-weight: 700; }
-  .chip.pts { color: #9ecbff; }
+  .chip.pts { color: var(--accent); font-weight: 600; }
+  .chip.proj { color: var(--accent); font-weight: 600; }
+  .chip.grp { color: var(--muted); border: 1px solid var(--border); background: transparent; }
+  .chip.time { color: var(--muted); }
+  .chip.done-at { color: var(--ok); font-weight: 600; }
   .chip.due-over { color: #fff; background: var(--bad); font-weight: 600; }
   .chip.due-today { color: #1a1a1a; background: var(--warn); font-weight: 600; }
   .chip.due-soon { color: var(--warn); }
   .card.p-over { border-left-color: var(--bad); }
   .card.p-today { border-left-color: var(--warn); }
+  .card.is-done { opacity: .88; }
+  .card.is-done .title { text-decoration: line-through; text-decoration-thickness: 1px; }
 
   /* Modal */
   .overlay {
@@ -185,7 +301,7 @@
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 12px;
-    width: 100%; max-width: 520px;
+    width: 100%; max-width: 560px;
     padding: 18px;
     box-shadow: 0 18px 60px rgba(0,0,0,.5);
   }
@@ -209,13 +325,13 @@
   .err { color: var(--bad); font-size: 12.5px; margin-top: 8px; white-space: pre-wrap; }
   .toast {
     position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
-    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    background: var(--panel-2); border: 1px solid var(--accent); color: var(--text);
     padding: 8px 16px; border-radius: 8px; font-size: 13px; z-index: 99;
     opacity: 0; pointer-events: none; transition: opacity .2s;
   }
   .toast.show { opacity: 1; }
   @media (max-width: 900px) {
-    #board { grid-template-columns: repeat(5, 240px); }
+    #board { grid-template-columns: repeat(5, 250px); }
   }
 </style>
 </head>
@@ -230,9 +346,23 @@
   </div>
   <div class="stats" id="stats"></div>
   <div class="spacer"></div>
+  <select class="filter-select" id="filter-project" title="Filter by project">
+    <option value="">All projects</option>
+  </select>
+  <select class="filter-select" id="filter-group" title="Filter by group">
+    <option value="">All groups</option>
+  </select>
   <input class="search" id="search" type="search" placeholder="Search tickets…">
   <button class="toggle" id="overdue-toggle" title="Show only overdue tickets">⚠ Overdue</button>
   <a class="btn" href="/api/tickets/export.csv" download>Export CSV</a>
+  <select class="theme-select" id="header-theme" title="Theme (saved in this browser)">
+    <option value="">Neutral · Dark</option>
+    <option value="light">Neutral · Light</option>
+    <option value="blazers-dark">Trail Blazers · Dark</option>
+    <option value="blazers-light">Trail Blazers · Light</option>
+    <option value="seahawks-dark">Seahawks · Dark</option>
+    <option value="seahawks-light">Seahawks · Light</option>
+  </select>
   <button class="btn primary" id="new-ticket">+ New Ticket</button>
 </header>
 
@@ -250,6 +380,16 @@
       <textarea id="f-desc" placeholder="Notes, links, next steps…"></textarea>
     </div>
     <div class="grid2">
+      <div class="field">
+        <label for="f-project">Project</label>
+        <input id="f-project" list="dl-projects" maxlength="80" placeholder="e.g. Acme">
+        <datalist id="dl-projects"></datalist>
+      </div>
+      <div class="field">
+        <label for="f-group">Group</label>
+        <input id="f-group" list="dl-groups" maxlength="80" placeholder="e.g. Forms">
+        <datalist id="dl-groups"></datalist>
+      </div>
       <div class="field">
         <label for="f-status">Column</label>
         <select id="f-status"></select>
@@ -279,6 +419,10 @@
           <option value="critical">Critical</option>
         </select>
       </div>
+      <div class="field">
+        <label for="f-time">Time spent (hours)</label>
+        <input id="f-time" type="number" min="0" max="999" step="0.25" placeholder="0">
+      </div>
     </div>
     <div class="err" id="form-err"></div>
     <div class="modal-actions">
@@ -295,16 +439,19 @@
 <script>
 const STATUSES = [
   { id: "backlog",     label: "Backlog",     color: "#6e7a8a" },
-  { id: "todo",        label: "To Do",       color: "#4f8cff" },
+  { id: "todo",        label: "To Do",       color: "var(--accent)" },
   { id: "in_progress", label: "In Progress", color: "#d29922" },
   { id: "review",      label: "Review",      color: "#a371f7" },
   { id: "done",        label: "Done",        color: "#3fb950" },
 ];
 
 let tickets = [];
+let meta = { projects: [], groups: [] };
 let editingId = null;
 let searchQ = "";
 let overdueOnly = false;
+let filterProject = "";
+let filterGroup = "";
 let dragId = null;
 
 const $ = (s) => document.querySelector(s);
@@ -333,6 +480,19 @@ function dueInfo(t) {
 function escapeHtml(s) {
   return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
+function fmtTime(hours) {
+  if (!hours) return "";
+  const h = Number(hours);
+  if (h % 1 === 0) return h + "h";
+  const m = Math.round((h % 1) * 60);
+  return (Math.floor(h) ? Math.floor(h) + "h" : "") + m + "m";
+}
+function fmtDoneAt(iso) {
+  if (!iso) return "";
+  const d = new Date(iso.endsWith("Z") ? iso : iso + "Z");
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) +
+    " " + d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
 function toast(msg) {
   const el = $("#toast");
   el.textContent = msg;
@@ -357,17 +517,22 @@ async function api(path, opts = {}) {
 }
 
 async function refresh() {
-  tickets = await api("/api/tickets");
+  [tickets, meta] = await Promise.all([api("/api/tickets"), api("/api/meta")]);
   render();
 }
 
+function scopeFiltered() {
+  return tickets.filter(t =>
+    (!filterProject || t.project === filterProject) &&
+    (!filterGroup || t.group === filterGroup));
+}
 function visible(t) {
   if (overdueOnly) {
     const di = dueInfo(t);
     if (!di || di.level !== -1) return false;
   }
   if (searchQ) {
-    const hay = (t.title + " " + t.description).toLowerCase();
+    const hay = (t.title + " " + t.description + " " + t.project + " " + t.group).toLowerCase();
     if (!hay.includes(searchQ)) return false;
   }
   return true;
@@ -375,29 +540,60 @@ function visible(t) {
 
 function renderStats() {
   const today = localToday();
-  const open = tickets.filter(t => t.status !== "done");
+  const scoped = scopeFiltered();
+  const open = scoped.filter(t => t.status !== "done");
   const overdue = open.filter(t => t.due_date && t.due_date < today).length;
-  const week = open.filter(t => {
-    if (!t.due_date || t.due_date < today) return false;
-    return daysUntil(t.due_date) <= 7;
-  }).length;
-  const done = tickets.length - open.length;
+  const week = open.filter(t => t.due_date && t.due_date >= today && daysUntil(t.due_date) <= 7).length;
+  const done = scoped.length - open.length;
+  const hours = scoped.reduce((s, t) => s + (t.time_hours || 0), 0);
   $("#stats").innerHTML = `
     <div class="stat"><b>${open.length}</b>Open</div>
     <div class="stat warn"><b>${week}</b>Due ≤7d</div>
     <div class="stat bad"><b>${overdue}</b>Overdue</div>
-    <div class="stat"><b>${done}</b>Done</div>`;
+    <div class="stat"><b>${done}</b>Done</div>
+    <div class="stat"><b>${fmtTime(hours) || "0"}</b>Time logged</div>`;
+}
+
+function populateFilters() {
+  function fill(select, values, current) {
+    const first = select.options[0].cloneNode(true);
+    select.innerHTML = "";
+    select.appendChild(first);
+    for (const v of values) {
+      const o = document.createElement("option");
+      o.value = v;
+      o.textContent = v;
+      select.appendChild(o);
+    }
+    if (current && !values.includes(current)) {
+      const o = document.createElement("option");
+      o.value = current;
+      o.textContent = current + " (removed)";
+      select.appendChild(o);
+    }
+    select.value = current || "";
+    select.classList.toggle("filtered", !!current);
+  }
+  fill($("#filter-project"), meta.projects, filterProject);
+  fill($("#filter-group"), meta.groups, filterGroup);
+}
+function populateDatalists() {
+  $("#dl-projects").innerHTML = meta.projects.map(p => `<option value="${escapeHtml(p)}">`).join("");
+  $("#dl-groups").innerHTML = meta.groups.map(g => `<option value="${escapeHtml(g)}">`).join("");
 }
 
 function render() {
   renderStats();
+  populateFilters();
+  populateDatalists();
   boardEl.innerHTML = "";
+  const scoped = scopeFiltered();
   for (const st of STATUSES) {
-    const items = tickets
+    const items = scoped
       .filter(t => t.status === st.id)
       .filter(visible)
       .sort((a, b) => a.position - b.position || a.id - b.id);
-    const allInCol = tickets.filter(t => t.status === st.id);
+    const allInCol = scoped.filter(t => t.status === st.id);
     const pts = allInCol.reduce((s, t) => s + (t.points || 0), 0);
 
     const col = document.createElement("section");
@@ -428,8 +624,10 @@ function render() {
       const t = tickets.find(x => x.id === dragId);
       dragId = null;
       if (!t || t.status === st.id) return;
+      const enteringDone = st.id === "done";
       await api(`/api/tickets/${t.id}`, { method: "PATCH", body: { status: st.id } });
       await refresh();
+      if (enteringDone) toast("Marked done ✓");
     });
     boardEl.appendChild(col);
   }
@@ -437,7 +635,7 @@ function render() {
 
 function makeCard(t) {
   const el = document.createElement("article");
-  el.className = "card";
+  el.className = "card" + (t.status === "done" ? " is-done" : "");
   el.draggable = true;
   el.dataset.id = t.id;
   const di = dueInfo(t);
@@ -448,8 +646,12 @@ function makeCard(t) {
     <div class="title">${escapeHtml(t.title)}</div>
     ${t.description ? `<div class="desc">${escapeHtml(t.description)}</div>` : ""}
     <div class="meta">
+      ${t.project ? `<span class="chip proj">${escapeHtml(t.project)}</span>` : ""}
+      ${t.group ? `<span class="chip grp">${escapeHtml(t.group)}</span>` : ""}
       <span class="chip prio-${t.priority}">${t.priority}</span>
       ${t.points ? `<span class="chip pts">${t.points} pt</span>` : ""}
+      ${fmtTime(t.time_hours) ? `<span class="chip time">⏱ ${fmtTime(t.time_hours)}</span>` : ""}
+      ${t.status === "done" && t.completed_at ? `<span class="chip done-at">✓ ${fmtDoneAt(t.completed_at)}</span>` : ""}
       ${di ? `<span class="chip ${di.cls}">${di.label}</span>` : ""}
     </div>`;
   el.addEventListener("click", () => openModal(t.id));
@@ -474,10 +676,13 @@ function openModal(id, presetStatus) {
   sel.innerHTML = STATUSES.map(s => `<option value="${s.id}">${s.label}</option>`).join("");
   $("#f-title").value = t ? t.title : "";
   $("#f-desc").value = t ? t.description : "";
+  $("#f-project").value = t ? t.project : (filterProject || "");
+  $("#f-group").value = t ? t.group : (filterGroup || "");
   sel.value = t ? t.status : (presetStatus || "backlog");
   $("#f-points").value = t ? String(t.points) : "0";
   $("#f-priority").value = t ? t.priority : "medium";
   $("#f-due").value = t ? (t.due_date || "") : "";
+  $("#f-time").value = t && t.time_hours ? String(t.time_hours) : "";
   $("#overlay").classList.add("open");
   setTimeout(() => $("#f-title").focus(), 30);
 }
@@ -488,20 +693,24 @@ function closeModal() {
 
 $("#ticket-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const wasEditing = editingId != null;
   const body = {
     title: $("#f-title").value,
     description: $("#f-desc").value,
+    project: $("#f-project").value.trim(),
+    group: $("#f-group").value.trim(),
     status: $("#f-status").value,
     points: parseInt($("#f-points").value, 10) || 0,
     priority: $("#f-priority").value,
     due_date: $("#f-due").value || null,
+    time_hours: parseFloat($("#f-time").value) || 0,
   };
   try {
-    if (editingId) await api(`/api/tickets/${editingId}`, { method: "PATCH", body });
+    if (wasEditing) await api(`/api/tickets/${editingId}`, { method: "PATCH", body });
     else await api("/api/tickets", { method: "POST", body });
     closeModal();
     await refresh();
-    toast(editingId ? "Ticket updated" : "Ticket created");
+    toast(wasEditing ? "Ticket updated" : "Ticket created");
   } catch (err) {
     $("#form-err").textContent = err.message;
   }
@@ -534,6 +743,18 @@ $("#overdue-toggle").addEventListener("click", (e) => {
   e.currentTarget.classList.toggle("on", overdueOnly);
   render();
 });
+$("#filter-project").addEventListener("change", (e) => { filterProject = e.target.value; render(); });
+$("#filter-group").addEventListener("change", (e) => { filterGroup = e.target.value; render(); });
+
+/* ---------- themes ---------- */
+function applyTheme(v) {
+  if (v) document.documentElement.setAttribute("data-theme", v);
+  else document.documentElement.removeAttribute("data-theme");
+  try { localStorage.setItem("tb-theme", v); } catch (e) {}
+  $("#header-theme").value = v;
+}
+$("#header-theme").addEventListener("change", (e) => applyTheme(e.target.value));
+try { $("#header-theme").value = localStorage.getItem("tb-theme") || ""; } catch (e) {}
 
 /* ---------- init ---------- */
 $("#today-label").textContent = new Date().toLocaleDateString(undefined, {

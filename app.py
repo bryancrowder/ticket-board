@@ -10,20 +10,29 @@ from flask import Flask, g, jsonify, render_template, request
 
 DB_PATH = os.environ.get("TICKETS_DB", os.path.join(os.path.dirname(os.path.abspath(__file__)), "tickets.db"))
 
-SCHEMA = """
+SCHEMA_TABLE = """
 CREATE TABLE IF NOT EXISTS tickets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
+    project TEXT NOT NULL DEFAULT '',
+    group_name TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'backlog',
     points INTEGER NOT NULL DEFAULT 0,
     priority TEXT NOT NULL DEFAULT 'medium',
     due_date TEXT,
+    time_hours REAL NOT NULL DEFAULT 0,
+    completed_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     position INTEGER NOT NULL DEFAULT 0
 );
+"""
+
+SCHEMA_INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status, position);
+CREATE INDEX IF NOT EXISTS idx_tickets_project ON tickets(project);
+CREATE INDEX IF NOT EXISTS idx_tickets_group ON tickets(group_name);
 """
 
 VALID_STATUSES = ("backlog", "todo", "in_progress", "review", "done")
@@ -51,7 +60,19 @@ def init_db():
     d = os.path.dirname(os.path.abspath(DB_PATH))
     os.makedirs(d, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
-    conn.executescript(SCHEMA)
+    conn.executescript(SCHEMA_TABLE)
+    # Migrate databases created before projects/groups/time/completed existed.
+    # Must run BEFORE creating indexes on those columns.
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(tickets)").fetchall()}
+    if "project" not in cols:
+        conn.execute("ALTER TABLE tickets ADD COLUMN project TEXT NOT NULL DEFAULT ''")
+    if "group_name" not in cols:
+        conn.execute("ALTER TABLE tickets ADD COLUMN group_name TEXT NOT NULL DEFAULT ''")
+    if "time_hours" not in cols:
+        conn.execute("ALTER TABLE tickets ADD COLUMN time_hours REAL NOT NULL DEFAULT 0")
+    if "completed_at" not in cols:
+        conn.execute("ALTER TABLE tickets ADD COLUMN completed_at TEXT")
+    conn.executescript(SCHEMA_INDEXES)
     conn.commit()
     conn.close()
 
@@ -65,10 +86,14 @@ def row_to_dict(row):
         "id": row["id"],
         "title": row["title"],
         "description": row["description"],
+        "project": row["project"] or "",
+        "group": row["group_name"] or "",
         "status": row["status"],
         "points": row["points"],
         "priority": row["priority"],
         "due_date": row["due_date"] or None,
+        "time_hours": row["time_hours"] or 0,
+        "completed_at": row["completed_at"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
         "position": row["position"],
@@ -102,17 +127,39 @@ def validate_payload(payload):
         except (TypeError, ValueError):
             errs["due_date"] = "due_date must be YYYY-MM-DD."
             due = None
+    for field in ("project", "group"):
+        val = payload.get(field)
+        if val is not None and not isinstance(val, str):
+            errs[field] = "Must be a string."
+        elif isinstance(val, str) and len(val) > 80:
+            errs[field] = "Too long (max 80 chars)."
+    th = payload.get("time_hours", 0)
+    try:
+        th = float(th)
+        if th < 0 or th > 999:
+            raise ValueError
+    except (TypeError, ValueError):
+        errs["time_hours"] = "Time must be a number of hours between 0 and 999."
     return errs
 
 
 def clean_fields(payload):
+    def text(k, limit=80):
+        v = payload.get(k)
+        if v is None:
+            return ""
+        return str(v).strip()[:limit]
+
     return {
         "title": (payload.get("title") or "").strip(),
         "description": payload.get("description") or "",
+        "project": text("project"),
+        "group_name": text("group"),
         "status": payload.get("status", "backlog"),
         "points": int(payload.get("points", 0)),
         "priority": payload.get("priority", "medium"),
         "due_date": payload.get("due_date") or None,
+        "time_hours": float(payload.get("time_hours") or 0),
     }
 
 
@@ -131,16 +178,40 @@ def health():
     return jsonify({"ok": True})
 
 
+@app.route("/api/meta")
+def meta():
+    """Distinct non-empty project and group values, for dynamic filter dropdowns."""
+    db = get_db()
+    projects = [r[0] for r in db.execute(
+        "SELECT DISTINCT project FROM tickets WHERE project <> '' ORDER BY LOWER(project), project"
+    ).fetchall()]
+    groups = [r[0] for r in db.execute(
+        "SELECT DISTINCT group_name FROM tickets WHERE group_name <> '' ORDER BY LOWER(group_name), group_name"
+    ).fetchall()]
+    return jsonify({"projects": projects, "groups": groups})
+
+
 @app.route("/api/tickets", methods=["GET"])
 def list_tickets():
     status = request.args.get("status")
+    project = request.args.get("project")
+    group = request.args.get("group")
     db = get_db()
+    where, args = [], []
     if status:
-        rows = db.execute(
-            "SELECT * FROM tickets WHERE status = ? ORDER BY position, id", (status,)
-        ).fetchall()
-    else:
-        rows = db.execute("SELECT * FROM tickets ORDER BY position, id").fetchall()
+        where.append("status = ?")
+        args.append(status)
+    if project:
+        where.append("project = ?")
+        args.append(project)
+    if group:
+        where.append("group_name = ?")
+        args.append(group)
+    sql = "SELECT * FROM tickets"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY position, id"
+    rows = db.execute(sql, args).fetchall()
     return jsonify([row_to_dict(r) for r in rows])
 
 
@@ -155,9 +226,13 @@ def create_ticket():
     ts = now_iso()
     pos = max_position(db, f["status"]) + 1000
     cur = db.execute(
-        """INSERT INTO tickets (title, description, status, points, priority, due_date, created_at, updated_at, position)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (f["title"], f["description"], f["status"], f["points"], f["priority"], f["due_date"], ts, ts, pos),
+        """INSERT INTO tickets
+           (title, description, project, group_name, status, points, priority, due_date,
+            time_hours, completed_at, created_at, updated_at, position)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (f["title"], f["description"], f["project"], f["group_name"], f["status"],
+         f["points"], f["priority"], f["due_date"], f["time_hours"],
+         ts if f["status"] == "done" else None, ts, ts, pos),
     )
     db.commit()
     row = db.execute("SELECT * FROM tickets WHERE id = ?", (cur.lastrowid,)).fetchone()
@@ -174,7 +249,7 @@ def update_ticket(ticket_id):
 
     # Merge current values with patch so validation sees the full record.
     merged = row_to_dict(existing)
-    for k in ("title", "description", "status", "points", "priority", "due_date"):
+    for k in ("title", "description", "project", "group", "status", "points", "priority", "due_date", "time_hours"):
         if k in payload:
             merged[k] = payload[k]
     errs = validate_payload(merged)
@@ -182,6 +257,16 @@ def update_ticket(ticket_id):
         return jsonify({"error": errs}), 400
 
     f = clean_fields(merged)
+
+    # Completed timestamp: stamp when a card enters Done, clear when it leaves.
+    old_status = existing["status"]
+    new_status_in = f["status"]
+    if new_status_in == "done" and old_status != "done":
+        completed_at = now_iso()
+    elif new_status_in != "done":
+        completed_at = None
+    else:
+        completed_at = existing["completed_at"]
     # Moving to another column (or reordering) puts the card at that column's end
     # unless an explicit position was provided.
     new_status = f["status"]
@@ -192,9 +277,13 @@ def update_ticket(ticket_id):
 
     db.execute(
         """UPDATE tickets
-           SET title = ?, description = ?, status = ?, points = ?, priority = ?, due_date = ?, updated_at = ?, position = ?
+           SET title = ?, description = ?, project = ?, group_name = ?, status = ?,
+               points = ?, priority = ?, due_date = ?, time_hours = ?, completed_at = ?,
+               updated_at = ?, position = ?
            WHERE id = ?""",
-        (f["title"], f["description"], new_status, f["points"], f["priority"], f["due_date"], now_iso(), pos, ticket_id),
+        (f["title"], f["description"], f["project"], f["group_name"], new_status,
+         f["points"], f["priority"], f["due_date"], f["time_hours"], completed_at,
+         now_iso(), pos, ticket_id),
     )
     db.commit()
     row = db.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,)).fetchone()
@@ -234,9 +323,11 @@ def export_csv():
     rows = db.execute("SELECT * FROM tickets ORDER BY status, position, id").fetchall()
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["id", "title", "status", "priority", "points", "due_date", "description", "created_at", "updated_at"])
+    w.writerow(["id", "title", "project", "group", "status", "priority", "points", "due_date", "time_hours", "completed_at", "description", "created_at", "updated_at"])
     for r in rows:
-        w.writerow([r["id"], r["title"], r["status"], r["priority"], r["points"], r["due_date"] or "", r["description"], r["created_at"], r["updated_at"]])
+        w.writerow([r["id"], r["title"], r["project"], r["group_name"], r["status"], r["priority"],
+                    r["points"], r["due_date"] or "", r["time_hours"] or 0, r["completed_at"] or "",
+                    r["description"], r["created_at"], r["updated_at"]])
     resp = app.response_class(
         buf.getvalue().encode("utf-8"),
         mimetype="text/csv",
