@@ -194,6 +194,18 @@
     font-size: 13px;
   }
   .toggle.on { color: var(--bad); border-color: var(--bad); background: rgba(248,81,73,.08); }
+  .toggle.on-acc { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+  .week-nav { display: inline-flex; align-items: stretch; gap: 4px; }
+  .week-arrow {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 8px; padding: 7px 11px; font-size: 14px; line-height: 1;
+  }
+  .week-arrow:hover { color: var(--text); border-color: var(--accent); }
+  .week-label {
+    background: var(--panel-2); border: 1px solid var(--accent); color: var(--accent);
+    border-radius: 8px; padding: 7px 12px; font-size: 13px; font-weight: 600; white-space: nowrap;
+  }
+  .week-label:hover { filter: brightness(1.15); }
   .btn {
     background: var(--panel-2);
     border: 1px solid var(--border);
@@ -427,6 +439,13 @@
   </div>
   <input class="search" id="search" type="search" placeholder="Search tickets…">
   <button class="toggle" id="overdue-toggle" title="Show only overdue tickets">⚠ Overdue</button>
+  <button class="toggle" id="week-toggle" title="Show only tickets due in the selected week">📅 Week</button>
+  <span class="week-nav" id="week-nav" hidden>
+    <button type="button" class="week-arrow" id="week-prev" title="Previous week">‹</button>
+    <button type="button" class="week-label" id="week-label" title="Jump back to this week"></button>
+    <button type="button" class="week-arrow" id="week-next" title="Next week">›</button>
+  </span>
+  <button class="toggle" id="undated-toggle" title="Show only tickets with no due date">∅ No date</button>
   <a class="btn" href="/api/tickets/export.csv" download>Export CSV</a>
   <select class="theme-select" id="header-theme" title="Theme (saved in this browser)">
     <option value="">Neutral · Dark</option>
@@ -474,7 +493,7 @@
         <select id="f-status"></select>
       </div>
       <div class="field">
-        <label for="f-due">Due date</label>
+        <label for="f-due" id="f-due-label">Due date</label>
         <input id="f-due" type="date">
       </div>
       <div class="field">
@@ -532,6 +551,15 @@ let overdueOnly = false;
 let filterProject = "";
 let filterGroup = "";
 let dragId = null;
+let weekMode = false;      // board scoped to the selected week's due dates
+let weekOffset = 0;        // 0 = this week, -1 = last week, +1 = next week …
+let undatedOnly = false;   // board scoped to tickets with no due date
+try {
+  weekMode = localStorage.getItem("tb-week-mode") === "1";
+  weekOffset = parseInt(localStorage.getItem("tb-week-offset") || "0", 10) || 0;
+  undatedOnly = localStorage.getItem("tb-undated") === "1";
+  if (weekMode) undatedOnly = false;  // mutually exclusive scopes
+} catch (e) {}
 
 const $ = (s) => document.querySelector(s);
 const boardEl = $("#board");
@@ -603,8 +631,65 @@ async function refresh() {
 function scopeFiltered() {
   return tickets.filter(t =>
     (!filterProject || t.project === filterProject) &&
-    (!filterGroup || t.group === filterGroup));
+    (!filterGroup || t.group === filterGroup) &&
+    (!weekMode || inSelectedWeek(t.due_date)) &&
+    (!undatedOnly || !t.due_date));
 }
+
+/* ---------- week helpers (Monday–Sunday weeks) ---------- */
+function dateStr(d) {
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+function weekBounds(offset) {
+  const now = new Date();
+  const monday = new Date(now);
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(now.getDate() - ((now.getDay() + 6) % 7) + offset * 7);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return [dateStr(monday), dateStr(sunday)];
+}
+function inSelectedWeek(d) {
+  if (!d) return false;
+  const [mon, sun] = weekBounds(weekOffset);
+  return d >= mon && d <= sun;  // ISO dates compare lexicographically
+}
+function weekLabel(offset) {
+  const [mon, sun] = weekBounds(offset);
+  const f = (s) => {
+    const [y, m, d] = s.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  };
+  return (offset === 0 ? "This week · " : "") + f(mon) + " – " + f(sun);
+}
+function saveWeekState() {
+  try {
+    localStorage.setItem("tb-week-mode", weekMode ? "1" : "0");
+    localStorage.setItem("tb-week-offset", String(weekOffset));
+    localStorage.setItem("tb-undated", undatedOnly ? "1" : "0");
+  } catch (e) {}
+}
+function refreshWeekUI() {
+  $("#week-toggle").classList.toggle("on-acc", weekMode);
+  $("#week-nav").hidden = !weekMode;
+  $("#week-label").textContent = weekLabel(weekOffset);
+  $("#undated-toggle").classList.toggle("on-acc", undatedOnly);
+  saveWeekState();
+}
+$("#week-toggle").addEventListener("click", () => {
+  weekMode = !weekMode;
+  if (weekMode) { undatedOnly = false; }
+  else { weekOffset = 0; }
+  render();
+});
+$("#week-prev").addEventListener("click", () => { weekOffset -= 1; render(); });
+$("#week-next").addEventListener("click", () => { weekOffset += 1; render(); });
+$("#week-label").addEventListener("click", () => { weekOffset = 0; render(); });
+$("#undated-toggle").addEventListener("click", () => {
+  undatedOnly = !undatedOnly;
+  if (undatedOnly) weekMode = false;
+  render();
+});
 function visible(t) {
   if (overdueOnly) {
     const di = dueInfo(t);
@@ -710,6 +795,7 @@ setupFormCombo("f-group", "groups");
 document.addEventListener("click", (e) => { if (!e.target.closest(".combo")) closePanels(); });
 
 function render() {
+  refreshWeekUI();
   renderStats();
   refreshFilterLabel($("#filter-project"), filterProject, "All projects");
   refreshFilterLabel($("#filter-group"), filterGroup, "All groups");
@@ -737,7 +823,7 @@ function render() {
       <div class="cards"></div>`;
     const cardsEl = col.querySelector(".cards");
     if (items.length === 0) {
-      cardsEl.innerHTML = `<div class="empty-hint">${overdueOnly || searchQ ? "No matches" : "Drop tickets here"}</div>`;
+      cardsEl.innerHTML = `<div class="empty-hint">${weekMode || undatedOnly || overdueOnly || searchQ ? "No matches" : "Drop tickets here"}</div>`;
     }
     for (const t of items) cardsEl.appendChild(makeCard(t));
 
@@ -752,9 +838,13 @@ function render() {
       dragId = null;
       if (!t || t.status === st.id) return;
       const enteringDone = st.id === "done";
-      await api(`/api/tickets/${t.id}`, { method: "PATCH", body: { status: st.id } });
-      await refresh();
-      if (enteringDone) toast("Marked done ✓");
+      try {
+        await api(`/api/tickets/${t.id}`, { method: "PATCH", body: { status: st.id } });
+        await refresh();
+        if (enteringDone) toast("Marked done ✓");
+      } catch (err) {
+        toast(err.message);
+      }
     });
     boardEl.appendChild(col);
   }
@@ -793,6 +883,12 @@ function makeCard(t) {
 }
 
 /* ---------- modal ---------- */
+function syncDueLabel() {
+  const st = $("#f-status").value;
+  const need = st === "todo" || st === "in_progress";
+  $("#f-due-label").textContent = need ? "Due date *" : "Due date";
+  $("#f-due").required = need;
+}
 function openModal(id, presetStatus) {
   editingId = id;
   const t = id ? tickets.find(x => x.id === id) : null;
@@ -810,9 +906,11 @@ function openModal(id, presetStatus) {
   $("#f-priority").value = t ? t.priority : "medium";
   $("#f-due").value = t ? (t.due_date || "") : "";
   $("#f-time").value = t && t.time_hours ? String(t.time_hours) : "";
+  syncDueLabel();
   $("#overlay").classList.add("open");
   setTimeout(() => $("#f-title").focus(), 30);
 }
+$("#f-status").addEventListener("change", syncDueLabel);
 function closeModal() {
   $("#overlay").classList.remove("open");
   editingId = null;
@@ -821,6 +919,12 @@ function closeModal() {
 $("#ticket-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const wasEditing = editingId != null;
+  // Active work must be scheduled — mirror of the server rule, for instant feedback.
+  const presetSt = $("#f-status").value;
+  if ((presetSt === "todo" || presetSt === "in_progress") && !$("#f-due").value) {
+    $("#form-err").textContent = "A due date is required when a ticket is in To Do or In Progress.";
+    return;
+  }
   const body = {
     title: $("#f-title").value,
     description: $("#f-desc").value,

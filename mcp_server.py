@@ -158,7 +158,8 @@ def create_ticket(
         status: one of backlog | todo | in_progress | review | done
         points: story-point estimate (0, 1, 2, 3, 5, 8, 13)
         priority: one of low | medium | high | critical
-        due_date: due date as YYYY-MM-DD, or omit
+        due_date: due date as YYYY-MM-DD, or omit — REQUIRED when status is
+            todo or in_progress
         time_hours: hours already spent (0-999)
     """
     return _req("POST", "/api/tickets", {
@@ -193,7 +194,9 @@ def update_ticket(
     Notes:
         status: backlog | todo | in_progress | review | done.
             Moving to done stamps completed_at; moving out of done clears it.
+            todo and in_progress always require a due_date.
         due_date: YYYY-MM-DD, or pass null to clear it.
+            (Cannot be cleared while the ticket is todo / in_progress.)
         time_hours: 0-999 hours spent.
     """
     body = {}

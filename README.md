@@ -15,6 +15,9 @@ database server.
 - **Priorities** — Low / Medium / High / Critical badges
 - **Projects & groups** — tag any ticket with a project (e.g. `Acme`) and a group (e.g. `Forms`) with expandable pickers: click a field to expand the list of existing values, type to filter, or type a brand-new one; the board has matching dropdowns to filter everything by either, or both
 - **Time tracking** — log hours spent per ticket (quarter-hour steps); cards show a ⏱ chip and the header totals time logged; moving a ticket to Done stamps a `completed_at` timestamp shown on the card
+- **Week-by-week view** — one click filters the whole board (cards *and* header stats) to the week you pick; ‹ › walk any past or future week, and "This week" is the default landing spot — your selection is remembered between visits
+- **No-date view** — one click shows everything that has no due date, so unscheduled work never slips through the cracks
+- **Scheduled work stays scheduled** — a ticket in To Do or In Progress must always have a due date (the UI and API both enforce it); Backlog, Review, and Done may be unscheduled
 - **Themes** — per-browser theme picker (saved locally): Neutral dark/light, Trail Blazers dark/light, Seahawks dark/light
 - **Search & filters** — live text search across titles and descriptions, plus a one-click "overdue only" view
 - **CSV export** — one click to dump the whole board for a spreadsheet or backup
@@ -97,6 +100,10 @@ Priorities: `low`, `medium`, `high`, `critical`.
 `completed_at` is managed automatically: it is stamped when a ticket's status
 changes to `done` and cleared when it leaves `done`. `time_hours` is a number
 from 0 to 999.
+
+**Due-date rule:** a ticket whose status is `todo` or `in_progress` must have a
+`due_date` — creating it without one, or clearing it while in those columns,
+returns `400`. Move it to `backlog` (or `review`/`done`) first to unschedule it.
 
 ## MCP server (optional)
 

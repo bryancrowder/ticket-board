@@ -127,6 +127,10 @@ def validate_payload(payload):
         except (TypeError, ValueError):
             errs["due_date"] = "due_date must be YYYY-MM-DD."
             due = None
+    # Active work must be scheduled: a ticket that is To Do or In Progress
+    # always needs a due date (Backlog / Review / Done may be unscheduled).
+    if status in ("todo", "in_progress") and not (due or "").strip() and "due_date" not in errs:
+        errs["due_date"] = "A due date is required when a ticket is in To Do or In Progress."
     for field in ("project", "group"):
         val = payload.get(field)
         if val is not None and not isinstance(val, str):
